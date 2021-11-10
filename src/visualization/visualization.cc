@@ -78,6 +78,14 @@ void DrawPoint(const Vector2f& p, uint32_t color, VisualizationMsg& msg) {
   msg.points.push_back(point);
 }
 
+void DrawPointCloud(const std::vector<Vector2f>& cloud, uint32_t color,
+                    VisualizationMsg& msg){
+    for (const auto& point : cloud) {
+        DrawPoint(point, color, msg);
+    }
+  return;
+}
+
 void DrawLine(const Vector2f& p0,
               const Vector2f& p1,
               uint32_t color,
@@ -138,4 +146,66 @@ void DrawPathOption(const float curvature,
   option.clearance = clearance;
   msg.path_options.push_back(option);
 }
+
+// convenient method to draw all aspects of the robot boundaries, wheels, etc
+void DrawRobot(
+  float width, float length, float axle_offset, float safety_margin_front, float safety_margin_side,
+  const amrl_msgs::AckermannCurvatureDriveMsg& drive_msg, VisualizationMsg& viz_msg, const bool collision){
+  uint32_t color;
+  if (collision) {
+    color = 0xf70c0c;
+  } else {
+    color = 0x68ad7b;
+  }
+  // draw velocity/curve vector/path
+  visualization::DrawPathOption(
+    drive_msg.curvature, drive_msg.velocity, drive_msg.curvature, viz_msg);
+  // draw robot boundaries - left side, right side, front, back
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0), width/2.0), 
+                          Vector2f(-axle_offset + (length/2.0), width/2.0),
+                          0x68ad7b,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0), -width/2.0), 
+                          Vector2f(-axle_offset + (length/2.0), -width/2.0),
+                          0x68ad7b,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0), width/2.0), 
+                          Vector2f(-axle_offset - (length/2.0), -width/2.0),
+                          0x68ad7b,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset + (length/2.0), width/2.0),
+                          Vector2f(-axle_offset + (length/2.0), -width/2.0),
+                          0x68ad7b,
+                          viz_msg);
+  // draw robot wheels
+  // draw robot safety margin
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0) - safety_margin_front, safety_margin_side + width/2.0), 
+                          Vector2f(-axle_offset + (length/2.0) + safety_margin_front, safety_margin_side + width/2.0),
+                          color,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0) - safety_margin_front, -safety_margin_side-width/2.0), 
+                          Vector2f(-axle_offset + (length/2.0) + safety_margin_front, -safety_margin_side-width/2.0),
+                          color,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset - (length/2.0) - safety_margin_front, safety_margin_side+width/2.0), 
+                          Vector2f(-axle_offset - (length/2.0) - safety_margin_front, -safety_margin_side-width/2.0),
+                          color,
+                          viz_msg);
+  visualization::DrawLine(Vector2f(-axle_offset + (length/2.0) + safety_margin_front, safety_margin_side+width/2.0),
+                          Vector2f(-axle_offset + (length/2.0) + safety_margin_front, -safety_margin_side-width/2.0),
+                          color,
+                          viz_msg);
+  return;
+}
+
+// convenient method to draw target as a wall
+void DrawTarget(const Vector2f& target_loc_, VisualizationMsg& msg){
+  visualization::DrawCross(target_loc_, 0.15, 0x68ad7b, msg);
+  visualization::DrawLine(Vector2f(0.0,0.0),
+                          target_loc_,
+                          0x68ad7b,
+                          msg);
+  return;
+}
+
 }  // namespace visualization

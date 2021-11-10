@@ -20,11 +20,11 @@
 //========================================================================
 
 #include <stdint.h>
-
 #include <string>
 
 #include "eigen3/Eigen/Dense"
 #include "amrl_msgs/VisualizationMsg.h"
+#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 
 namespace visualization {
 
@@ -39,6 +39,11 @@ amrl_msgs::VisualizationMsg NewVisualizationMessage(
 void DrawPoint(const Eigen::Vector2f& p,
                uint32_t color,
                amrl_msgs::VisualizationMsg& msg);
+
+// convenient method to draw point cloud
+void DrawPointCloud(const std::vector<Eigen::Vector2f>& cloud,
+                    uint32_t color,
+                    amrl_msgs::VisualizationMsg& msg);
 
 // Add a single line to the visualization message.
 void DrawLine(const Eigen::Vector2f& p0,
@@ -69,5 +74,11 @@ void DrawPathOption(const float curvature,
                     const float distance,
                     const float clearance,
                     amrl_msgs::VisualizationMsg& msg);
+
+// convenient method to draw all aspects of the robot boundarys, wheels, etc
+void DrawRobot(float width, float length, float axle_offset, float safety_margin_front, float safety_margin_side,
+  const amrl_msgs::AckermannCurvatureDriveMsg& drive_msg, amrl_msgs::VisualizationMsg& viz_msg, const bool collision);
+
+void DrawTarget(const Eigen::Vector2f& target_loc_, amrl_msgs::VisualizationMsg& msg);
 
 }  // namespace visualization

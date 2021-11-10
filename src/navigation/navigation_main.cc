@@ -69,10 +69,11 @@ DEFINE_string(init_topic,
               "initialpose",
               "Name of ROS topic for initialization");
 DEFINE_string(map, "maps/GDC1.txt", "Name of vector map file");
+DEFINE_double(latency, 0.0, "Built-in latency in control");
 
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
-Navigation* navigation_ = nullptr;
+std::unique_ptr<Navigation> navigation_;
 
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
   if (FLAGS_v > 0) {
@@ -83,15 +84,21 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   // Location of the laser on the robot. Assumes the laser is forward-facing.
   const Vector2f kLaserLoc(0.2, 0);
 
-  static vector<Vector2f> point_cloud_;
-  // TODO Convert the LaserScan to a point cloud
-  // The LaserScan parameters are accessible as follows:
-  // msg.angle_increment // Angular increment between subsequent rays
-  // msg.angle_max // Angle of the first ray
-  // msg.angle_min // Angle of the last ray
-  // msg.range_max // Maximum observable range
-  // msg.range_min // Minimum observable range
-  // msg.ranges[i] // The range of the i'th ray
+  vector<Vector2f> point_cloud_;
+  // initial current theta
+  float cur_theta = msg.angle_min;
+  for (unsigned int p = 0; p < msg.ranges.size(); p++) {
+    if (!((msg.ranges[p] >= msg.range_max) || (msg.ranges[p] <= msg.range_min))) {
+      // create a Vector2f based on range and theta
+      Vector2f point(msg.ranges[p] * cos(cur_theta), msg.ranges[p] * sin(cur_theta));
+      // shift point cloud by laser location
+      point += kLaserLoc;
+      // add point vector to point_cloud_
+      point_cloud_.push_back(point);
+    }
+    // increment current theta
+    cur_theta += msg.angle_increment;
+  }
   navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
   last_laser_msg_ = msg;
 }
@@ -137,7 +144,7 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  navigation_ = new Navigation(FLAGS_map, &n);
+  navigation_.reset(new Navigation(FLAGS_map, FLAGS_latency, &n));
 
   ros::Subscriber velocity_sub =
       n.subscribe(FLAGS_odom_topic, 1, &OdometryCallback);
@@ -148,12 +155,12 @@ int main(int argc, char** argv) {
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
 
-  RateLoop loop(20.0);
+  RateLoop loop(navigation_->update_frequency_); // gets called 20 times per second
   while (run_ && ros::ok()) {
     ros::spinOnce();
     navigation_->Run();
     loop.Sleep();
   }
-  delete navigation_;
+  // delete navigation_;
   return 0;
 }

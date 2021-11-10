@@ -20,8 +20,10 @@
 //========================================================================
 
 #include <vector>
+#include <memory>
 
 #include "eigen3/Eigen/Dense"
+#include "object_avoidance.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -32,20 +34,37 @@ namespace ros {
 
 namespace navigation {
 
-struct PathOption {
-  float curvature;
-  float clearance;
-  float free_path_length;
-  Eigen::Vector2f obstruction;
-  Eigen::Vector2f closest_point;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-};
-
 class Navigation {
  public:
 
-   // Constructor
-  explicit Navigation(const std::string& map_file, ros::NodeHandle* n);
+  // --------- Added ------------
+  Eigen::Vector2f last_odom_loc_ = Eigen::Vector2f(0.0, 0.0);
+  float last_odom_angle_ = 0.0;
+  Eigen::Vector2f odom_vel_  = Eigen::Vector2f(0.0, 0.0);
+  Eigen::Vector2f last_odom_vel_ = Eigen::Vector2f(0.0, 0.0);
+  Eigen::Vector2f odom_accel_ = Eigen::Vector2f(0.0, 0.0);
+  // -- Kinematic and dynamic constraints for the car.
+  float max_vel_ = 2.0;
+  float max_accel_ = 4.0;
+  float min_turn_radius_ = 0.98;
+  // -- Car dimensions.
+  float car_width_ = 0.281;
+  float car_length_ = 0.535;
+  float car_height_ = 0.15;
+  float car_safety_margin_front_ = 0.2;
+  float car_safety_margin_side_ = 0.05;
+  // -- Location of the robot's rear wheel axle relative to the center of the body.
+  float rear_axle_offset_ = -0.162;
+  object_avoidance::CarSpecs car_specs_ = {car_width_, car_height_,
+                         car_length_, car_safety_margin_front_,
+                         car_safety_margin_side_, rear_axle_offset_};
+  
+  Eigen::Vector2f laser_loc_ = Eigen::Vector2f(0.2, 0.15);
+  // -- Simulation Update Frequency.
+  float update_frequency_ = 20.0;
+
+    // Constructor
+  explicit Navigation(const std::string& map_file, const double& latency, ros::NodeHandle* n);
 
   // Used in callback from localization to update position.
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
@@ -87,6 +106,7 @@ class Navigation {
   Eigen::Vector2f odom_start_loc_;
   // Odometry-reported robot starting angle.
   float odom_start_angle_;
+  
   // Latest observed point cloud.
   std::vector<Eigen::Vector2f> point_cloud_;
 
@@ -96,6 +116,13 @@ class Navigation {
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.
   float nav_goal_angle_;
+
+  float odom_omega_;
+
+  double latency;
+
+  std::unique_ptr<object_avoidance::ObjectAvoidance> path_planner_;
+
 };
 
 }  // namespace navigation
