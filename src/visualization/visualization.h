@@ -79,6 +79,7 @@ void DrawPathOption(const float curvature,
 void DrawRobot(float width, float length, float axle_offset, float safety_margin_front, float safety_margin_side,
   const amrl_msgs::AckermannCurvatureDriveMsg& drive_msg, amrl_msgs::VisualizationMsg& viz_msg, const bool collision);
 
-void DrawTarget(const Eigen::Vector2f& target_loc_, amrl_msgs::VisualizationMsg& msg);
+void DrawLocalTarget(const Eigen::Vector2f& target_loc_, amrl_msgs::VisualizationMsg& msg);
+void DrawGlobalTarget(const Eigen::Vector2f& target_loc_, amrl_msgs::VisualizationMsg& msg);
 
 }  // namespace visualization

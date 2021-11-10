@@ -198,13 +198,17 @@ void DrawRobot(
   return;
 }
 
-// convenient method to draw target as a wall
-void DrawTarget(const Vector2f& target_loc_, VisualizationMsg& msg){
-  visualization::DrawCross(target_loc_, 0.15, 0x68ad7b, msg);
+void DrawLocalTarget(const Vector2f& target_loc_, VisualizationMsg& msg){
+  visualization::DrawCross(target_loc_, 0.15, 0x3474eb, msg);
   visualization::DrawLine(Vector2f(0.0,0.0),
                           target_loc_,
-                          0x68ad7b,
+                          0x3474eb,
                           msg);
+  return;
+}
+
+void DrawGlobalTarget(const Vector2f& target_loc_, VisualizationMsg& msg){
+  visualization::DrawCross(target_loc_, 0.15, 0x68ad7b, msg);
   return;
 }
 

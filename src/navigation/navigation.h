@@ -84,6 +84,8 @@ class Navigation {
   // Used to set the next target pose.
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
 
+  void ObstacleAvoid();
+
  private:
 
   // Whether odometry has been initialized.

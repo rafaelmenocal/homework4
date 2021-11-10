@@ -63,7 +63,8 @@ bool collision = false;
 float del_angle_ = 0.0;
 std::vector<Vector2f> proj_point_cloud_;
 std::vector<Vector2f> drawn_point_cloud_;
-Eigen::Vector2f nav_target = Vector2f(5.0,0.0);
+Eigen::Vector2f relative_local_target = Vector2f(3.0,3.0);
+Eigen::Vector2f global_target;
 int odd_num_paths = 15; // make sure this is odd
 double previous_time;
 double current_time;
@@ -212,6 +213,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_complete_ = false;
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
+  global_target = loc;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -288,11 +290,7 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   point_cloud_ = cloud;                                     
 }
 
-void Navigation::Run() {
-
-  // Clear previous visualizations.
-  visualization::ClearVisualizationMsg(local_viz_msg_);
-  visualization::ClearVisualizationMsg(global_viz_msg_);
+void Navigation::ObstacleAvoid(){
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) {
@@ -300,10 +298,8 @@ void Navigation::Run() {
   }
   
   // -------START CONTROL---------------------------------------
-
-  // proj_point_cloud_ = ProjectPointCloud2D(point_cloud_, odom_vel_, 0.0, speed, latency, del_angle_, odom_omega_, drive_msg_.curvature);
   
-  path_planner_->UpdatePaths(point_cloud_, nav_target);
+  path_planner_->UpdatePaths(point_cloud_, relative_local_target);
   auto best_path = path_planner_->GetHighestScorePath(); //GetPlannedCurvature();
   drive_msg_.curvature = best_path.curvature;
   drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
@@ -312,9 +308,9 @@ void Navigation::Run() {
   
   DrawPaths(path_planner_->GetPaths());
   visualization::DrawRobot(car_width_, car_length_, rear_axle_offset_, car_safety_margin_front_, car_safety_margin_side_, drive_msg_, local_viz_msg_, collision);
-  visualization::DrawTarget(nav_target, local_viz_msg_);
+  visualization::DrawLocalTarget(relative_local_target, local_viz_msg_);
   visualization::DrawPathOption(drive_msg_.curvature, 1.0, 0, local_viz_msg_);
-  // visualization::DrawPointCloud(point_cloud_, 0x44def2, local_viz_msg_); //light blue
+  visualization::DrawGlobalTarget(global_target, global_viz_msg_);
 
   ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);
   ROS_INFO("drive_msg_.curvature = %f", drive_msg_.curvature);
@@ -341,8 +337,61 @@ void Navigation::Run() {
   
   ROS_INFO("=================END CONTROL==================");    
 
-  // -------END CONTROL---------------------------------------
+}
 
+
+void Navigation::Run() {
+
+  // Clear previous visualizations.
+  visualization::ClearVisualizationMsg(local_viz_msg_);
+  visualization::ClearVisualizationMsg(global_viz_msg_);
+
+  // Avoid Obstacles
+  ObstacleAvoid();
+
+  // ====================
+  // Define Variables - most of these are global variables that get updated
+  //     during execution
+  // ==================== 
+  // robot.loc = Vector2f(x, y) in map_frame can subscribe to localization msg
+  // Representation of the world
+  // global_graph = a graph of Nodes and edges connect adjacent Nodes
+  //     create global_graph during initialization given map data
+  //     Note: we should probably find a good implementation of c++ A* 
+  //         search and structure global_graph based on this 
+  //         ie. 1) vertex/edges, 2) vertex/neighbors, 3) adjacency matrix
+  // resolution = how spread out nodes are in global_graph
+  // struct Node {
+  //    float id;
+  //    float x; // map_frame
+  //    float y; // map_frame
+  //    bool clear;
+  // } 
+  // global_path = a list of nodes in global_graph which correspond to 
+  //         path to global target
+  // max_separation = how far the robot can get from global path before
+  //           recalculating global path
+  // local_target_radius = how far the local_target is from the robot
+  //     when calculating the intersection between the circle of 
+  //     local_target_radius and the global_path
+
+
+  // ====================
+  // Main Path Planning Control
+  // ====================
+  // // robot is at global_target
+  // if ((robot.loc - global_target).norm() <= resolution) { // distance to global target
+  //    drive_msg_.velocity = 0;
+  //  } else { // robot is not at global target
+  //     // robot is straying off global path 
+  //     if (distance from global path > max_separation) {
+  //        // do A* search on global_graph from robot.loc to global_target 
+  //        global_path = Plan_Global_Path(robot.loc, global_graph, global_target); 
+  //     }
+  //     // find intersection of circle around robot with global path, return relative coordinates to robot
+  //     relative_local_target = Calculate_Local_Target(robot.loc, global_path, local_target_radius);
+  //  }
+  
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
   global_viz_msg_.header.stamp = ros::Time::now();
