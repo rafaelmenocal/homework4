@@ -40,7 +40,6 @@
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
-// using amrl_msgs::Localization2DMsg;
 using std::string;
 using std::vector;
 using namespace std;
@@ -53,7 +52,6 @@ ros::Publisher drive_pub_; // publish to /ackermann_curvature_drive
 ros::Publisher viz_pub_;  // publish to /visualization
 VisualizationMsg local_viz_msg_; // points, lines, arcs, etc.
 VisualizationMsg global_viz_msg_; // points, lines, arcs, etc.
-// Localization2DMsg loc_msg_;
 AckermannCurvatureDriveMsg drive_msg_; // velocity, curvature
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
@@ -78,9 +76,10 @@ bool odometry_debug = false;
   // Define Variables - most of these are global variables that get updated
   //     during execution
   // ==================== 
-  // float map_x_width = 100.0; // -50.0 to +50.0
-  // float map_y_height = 100.0;  // -50.0 to +50.0
-  float resolution = 0.5; // meters between nodes
+  float map_x_width = 100.0; // -50.0 to +50.0
+  float map_y_height = 100.0;  // -50.0 to +50.0
+  float resolution = 2.0; // meters between nodes
+  Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
   // float max_path_sep = 1.5; // meters away from path
   // float local_target_radius = 3.0; // meters away from robot
 
@@ -215,6 +214,46 @@ float_t CalculateVelocityMsg(const std::vector<Vector2f>& point_cloud_, object_a
   }
 }
 
+// given the x and y map coordinates, return the closest index i, j
+Eigen::Vector2i PointToIndex(Eigen::Vector2f point){
+  return Eigen::Vector2i(int(round(((map_y_height/2.0) - point.y())/resolution)), int(round((point.x() + (map_x_width/2))/resolution)));
+}
+
+// given the matrix indices, return the map x and y location
+Eigen::Vector2f IndexToPoint(Eigen::Vector2i loc){
+                          // 0  - (100/2) = -50      (100/2) - 0 = 50  (0, 0) -> (-50, 50)
+                          // 0  - (100/2) = -50      (100/2) - 1 = 49  (1, 0) -> (-50, 49)
+  return Eigen::Vector2f((loc.y() * resolution) - (map_x_width / 2), (map_y_height / 2) - (loc.x() * resolution));
+}
+
+// given the robot location, highlight nearest node in red
+void DrawRobotNode(Eigen::Vector2f loc){
+  visualization::DrawPoint(IndexToPoint(PointToIndex(loc)), 0xcf001c, global_viz_msg_);
+}
+
+// given the target location, highlight nearest node in green
+void DrawTargetNode(Eigen::Vector2f loc){
+  visualization::DrawPoint(IndexToPoint(PointToIndex(loc)), 0x3ede12, global_viz_msg_);
+}
+
+// iterate through Matrix global_graph to overlay the nodes on the map
+void OverlayGlobalGraph() {
+  for (int i = 0; i < global_graph.cols(); i+=1){
+    for (int j = 0; j < global_graph.rows(); j+=1){
+      visualization::DrawPoint(IndexToPoint(Eigen::Vector2i(i, j)), 0x7d7d7d, global_viz_msg_);
+    }
+  }
+}
+
+void InitializeGlobalGraph() {
+  ROS_INFO("global_graph.shape = (%ld, %ld)", global_graph.rows(), global_graph.cols());
+  // for (int x_i = 0; x_i < global_graph.cols(); x_i+=1){
+  //   for (int y_i = 0; y_i < global_graph.rows(); y_i+=1){
+  //     global_graph(x_i,y_i) = 0; // add 0 if there is a map line near the node
+  //   }
+  // }
+}
+
 // -------END HELPER FUNCTIONS-------------
 
 // Navigation Constructor called when Navigation instantiated in navigation_main.cc
@@ -237,10 +276,9 @@ Navigation::Navigation(const string& map_file, const double& latency, ros::NodeH
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
-  // loc_msg_ = n->advertise<Localization2DMsg>(
-  //  "", 1);
   InitRosHeader("base_link", &drive_msg_.header);
   ros::Time::init();
+  InitializeGlobalGraph();
 
   // Create ObjectAvoidance object that will manage path calculations
   path_planner_.reset(
@@ -387,9 +425,12 @@ void Navigation::Run() {
 
   // Avoid Obstacles
   ObstacleAvoid();
+  OverlayGlobalGraph();
+  DrawTargetNode(global_target);
+  DrawRobotNode(robot_loc_);
 
-  ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
-  ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
+  // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
+  // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
   // ====================
   // Main Path Planning Control
   // ====================
