@@ -64,7 +64,7 @@ bool collision = false;
 float del_angle_ = 0.0;
 std::vector<Vector2f> proj_point_cloud_;
 std::vector<Vector2f> drawn_point_cloud_;
-Eigen::Vector2f relative_local_target = Vector2f(3.0,3.0);
+Eigen::Vector2f relative_local_target = Vector2f(0.0,0.0);
 Eigen::Vector2f global_target;
 int odd_num_paths = 15; // make sure this is odd
 double previous_time;
@@ -81,7 +81,7 @@ bool odometry_debug = false;
   float resolution = 2.0; // meters between nodes
   Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
   // float max_path_sep = 1.5; // meters away from path
-  // float local_target_radius = 3.0; // meters away from robot
+  float local_target_radius = 3.0; // meters away from robot
 
   // Representation of the world
   // global_graph = a graph of Nodes and edges connect adjacent Nodes
@@ -228,12 +228,16 @@ Eigen::Vector2f IndexToPoint(Eigen::Vector2i loc){
 
 // given the robot location, highlight nearest node in red
 void DrawRobotNode(Eigen::Vector2f loc){
-  visualization::DrawPoint(IndexToPoint(PointToIndex(loc)), 0xcf001c, global_viz_msg_);
+  Eigen::Vector2f point =IndexToPoint(PointToIndex(loc));
+  visualization::DrawArc(point, 0.3, 0, 2.0 * M_PI, 0x0045cf, global_viz_msg_);
+  visualization::DrawPoint(point, 0x0045cf, global_viz_msg_);
 }
 
 // given the target location, highlight nearest node in green
 void DrawTargetNode(Eigen::Vector2f loc){
-  visualization::DrawPoint(IndexToPoint(PointToIndex(loc)), 0x3ede12, global_viz_msg_);
+  Eigen::Vector2f point =IndexToPoint(PointToIndex(loc));
+  visualization::DrawArc(point, 0.3, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+  visualization::DrawPoint(point, 0x3ede12, global_viz_msg_);
 }
 
 // iterate through Matrix global_graph to overlay the nodes on the map
@@ -386,7 +390,7 @@ void Navigation::ObstacleAvoid(){
   DrawPaths(path_planner_->GetPaths());
   visualization::DrawRobot(car_width_, car_length_, rear_axle_offset_, car_safety_margin_front_, car_safety_margin_side_, drive_msg_, local_viz_msg_, collision);
   visualization::DrawLocalTarget(relative_local_target, local_viz_msg_);
-  visualization::DrawPathOption(drive_msg_.curvature, 1.0, 0, local_viz_msg_);
+  visualization::DrawPathOption(drive_msg_.curvature, local_target_radius, 0, local_viz_msg_);
   visualization::DrawGlobalTarget(global_target, global_viz_msg_);
 
   if (obstacle_debug) {ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);}
@@ -428,6 +432,7 @@ void Navigation::Run() {
   OverlayGlobalGraph();
   DrawTargetNode(global_target);
   DrawRobotNode(robot_loc_);
+  visualization::DrawArc(Vector2f(0.0, 0.0), local_target_radius, 0, 2.0 * M_PI, 0x0045cf, local_viz_msg_);
 
   // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
   // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
@@ -436,9 +441,10 @@ void Navigation::Run() {
   // ====================
   // robot is at global_target
   if ((robot_loc_ - global_target).norm() <= resolution) { // distance to global target
-     relative_local_target = Vector2f(0.0, 0.0);
+    //  relative_local_target = Vector2f(0.0, 0.0);
+     drive_msg_.velocity = 0;
    } else { // robot is not at global target
-      relative_local_target = Vector2f(2.0, 0.0);
+      relative_local_target = Vector2f(3.0, 0.0);
       // robot is straying off global path 
       // if (distance from global path > max_separation) {
       //    // do A* search on global_graph from robot.loc to global_target 

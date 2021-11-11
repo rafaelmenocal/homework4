@@ -199,10 +199,10 @@ void DrawRobot(
 }
 
 void DrawLocalTarget(const Vector2f& target_loc_, VisualizationMsg& msg){
-  visualization::DrawCross(target_loc_, 0.15, 0x3474eb, msg);
+  visualization::DrawCross(target_loc_, 0.15, 0x0045cf, msg);
   visualization::DrawLine(Vector2f(0.0,0.0),
                           target_loc_,
-                          0x3474eb,
+                          0x0045cf,
                           msg);
   return;
 }
