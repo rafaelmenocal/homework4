@@ -28,6 +28,7 @@
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "amrl_msgs/VisualizationMsg.h"
+// #include "amrl_msgs/Localization2DMsg.h"
 #include "glog/logging.h"
 #include "ros/ros.h"
 #include "shared/math/math_util.h"
@@ -39,6 +40,7 @@
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
+// using amrl_msgs::Localization2DMsg;
 using std::string;
 using std::vector;
 using namespace std;
@@ -51,6 +53,7 @@ ros::Publisher drive_pub_; // publish to /ackermann_curvature_drive
 ros::Publisher viz_pub_;  // publish to /visualization
 VisualizationMsg local_viz_msg_; // points, lines, arcs, etc.
 VisualizationMsg global_viz_msg_; // points, lines, arcs, etc.
+// Localization2DMsg loc_msg_;
 AckermannCurvatureDriveMsg drive_msg_; // velocity, curvature
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
@@ -69,6 +72,39 @@ int odd_num_paths = 15; // make sure this is odd
 double previous_time;
 double current_time;
 double del_time;
+bool obstacle_debug = false;
+bool odometry_debug = false;
+// ====================
+  // Define Variables - most of these are global variables that get updated
+  //     during execution
+  // ==================== 
+  // float map_x_width = 100.0; // -50.0 to +50.0
+  // float map_y_height = 100.0;  // -50.0 to +50.0
+  float resolution = 0.5; // meters between nodes
+  // float max_path_sep = 1.5; // meters away from path
+  // float local_target_radius = 3.0; // meters away from robot
+
+  // Representation of the world
+  // global_graph = a graph of Nodes and edges connect adjacent Nodes
+  //     create global_graph during initialization given map data
+  //     Note: we should probably find a good implementation of c++ A* 
+  //         search and structure global_graph based on this 
+  //         ie. 1) vertex/edges, 2) vertex/neighbors, 3) adjacency matrix
+  // resolution = how spread out nodes are in global_graph
+  // struct Node {
+  //    float id;
+  //    float x; // map_frame
+  //    float y; // map_frame
+  //    bool clear;
+  // } 
+  // global_path = a list of nodes in global_graph which correspond to 
+  //         path to global target
+  // max_separation = how far the robot can get from global path before
+  //           recalculating global path
+  // local_target_radius = how far the local_target is from the robot
+  //     when calculating the intersection between the circle of 
+  //     local_target_radius and the global_path
+
 } //namespace
 
 namespace navigation {
@@ -121,11 +157,11 @@ bool ProjectedPointCloudCollision(const std::vector<Vector2f>& proj_point_cloud_
     if (PointWithinSafetyMargin(projected_point, width, length, axle_offset, safety_margin_front, safety_margin_side)){
       //draw a red point where identified point is within safety margin
       visualization::DrawPoint(projected_point, 0xeb3434, local_viz_msg_);
-      ROS_INFO("Collision Alert: Collision Detected!");
+      if (obstacle_debug) {ROS_INFO("Collision Alert: Collision Detected!");}
       return true;
     }
   }
-  ROS_INFO("Collision Alert: None");
+  if (obstacle_debug) {ROS_INFO("Collision Alert: None");}
   return false;
 }
 
@@ -160,7 +196,7 @@ float_t CalculateVelocityMsg(const std::vector<Vector2f>& point_cloud_, object_a
     if (PointWithinSafetyMargin(point, car_specs_.car_width, car_specs_.car_length, car_specs_.rear_axle_offset, car_specs_.car_safety_margin_front, car_specs_.car_safety_margin_side)){
       //draw a red point where identified point is within safety margin
       visualization::DrawPoint(point, 0xeb3434, local_viz_msg_);
-      ROS_INFO("Collision Alert: Collision Detected!");
+      if (obstacle_debug) {ROS_INFO("Collision Alert: Collision Detected!");}
       collision = true;
       return 0.0;
     }
@@ -169,10 +205,10 @@ float_t CalculateVelocityMsg(const std::vector<Vector2f>& point_cloud_, object_a
   collision = false;
 
   if (free_path_length <= critical_dist){
-    ROS_INFO("Collision Alert: Predicting Collision");
+    if (obstacle_debug) {ROS_INFO("Collision Alert: Predicting Collision");}
     return 0.0;
   } else {
-    ROS_INFO("Collision Alert: None");
+    if (obstacle_debug) {ROS_INFO("Collision Alert: None");}
     return max_vel;
     // return max_vel * (min(free_path_length - critical_dist, float(4.0))) / 4.0
     // return 0.5 * max_vel * (min(free_path_length - critical_dist, float(4.0))) / 4.0 + max_vel * 0.5;
@@ -201,6 +237,8 @@ Navigation::Navigation(const string& map_file, const double& latency, ros::NodeH
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
+  // loc_msg_ = n->advertise<Localization2DMsg>(
+  //  "", 1);
   InitRosHeader("base_link", &drive_msg_.header);
   ros::Time::init();
 
@@ -249,29 +287,30 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
     del_angle_ = odom_angle_ - last_odom_angle_;
     odom_omega_ = del_angle_ / del_time; // update_frequency_;
     critical_time =  speed / max_accel_;
-    // critical_dist = 0.5 * (critical_time + latency) * speed;
     critical_dist = 0.5 * (critical_time + latency) * max_vel_;
 
-    ROS_INFO("================START CONTROL================="); 
-    ROS_INFO("current_time = %f", current_time);   
-    ROS_INFO("previous_time = %f", previous_time);  
-    ROS_INFO("del_time = %f", del_time); 
-    ROS_INFO("odom_loc_ = (%f, %f)", odom_loc_.x(), odom_loc_.y());
-    ROS_INFO("last_odom_loc_ = (%f, %f)", last_odom_loc_.x(), last_odom_loc_.y());
-    ROS_INFO("odom_vel_ = (%f, %f)", odom_vel_.x(),odom_vel_.y());
-    ROS_INFO("last_odom_vel = (%f, %f)",last_odom_vel_.x(), last_odom_vel_.y());
-    ROS_INFO("odom_accel_ = (%f, %f)", odom_accel_.x(), odom_accel_.y());    
-    ROS_INFO("speed = %f", speed);
-    ROS_INFO("accel = %f", accel);
-    ROS_INFO("latency = %f", latency);
-    ROS_INFO("critical_time = %f", critical_time);
-    ROS_INFO("critical_dist = %f", critical_dist);
-    ROS_INFO("----------------------");
-    ROS_INFO("odom_angle_ = %f", odom_angle_);
-    ROS_INFO("last_odom_angle_ = %f", last_odom_angle_);
-    ROS_INFO("del_angle_ = %f", del_angle_);
-    ROS_INFO("odom_omega_ = %f", odom_omega_);
-    ROS_INFO("----------------------");
+    if (odometry_debug){
+      ROS_INFO("================START CONTROL================="); 
+      ROS_INFO("current_time = %f", current_time);   
+      ROS_INFO("previous_time = %f", previous_time);  
+      ROS_INFO("del_time = %f", del_time); 
+      ROS_INFO("odom_loc_ = (%f, %f)", odom_loc_.x(), odom_loc_.y());
+      ROS_INFO("last_odom_loc_ = (%f, %f)", last_odom_loc_.x(), last_odom_loc_.y());
+      ROS_INFO("odom_vel_ = (%f, %f)", odom_vel_.x(),odom_vel_.y());
+      ROS_INFO("last_odom_vel = (%f, %f)",last_odom_vel_.x(), last_odom_vel_.y());
+      ROS_INFO("odom_accel_ = (%f, %f)", odom_accel_.x(), odom_accel_.y());    
+      ROS_INFO("speed = %f", speed);
+      ROS_INFO("accel = %f", accel);
+      ROS_INFO("latency = %f", latency);
+      ROS_INFO("critical_time = %f", critical_time);
+      ROS_INFO("critical_dist = %f", critical_dist);
+      ROS_INFO("----------------------");
+      ROS_INFO("odom_angle_ = %f", odom_angle_);
+      ROS_INFO("last_odom_angle_ = %f", last_odom_angle_);
+      ROS_INFO("del_angle_ = %f", del_angle_);
+      ROS_INFO("odom_omega_ = %f", odom_omega_);
+      ROS_INFO("----------------------");
+    }
   }
 
   previous_time = current_time;
@@ -312,30 +351,30 @@ void Navigation::ObstacleAvoid(){
   visualization::DrawPathOption(drive_msg_.curvature, 1.0, 0, local_viz_msg_);
   visualization::DrawGlobalTarget(global_target, global_viz_msg_);
 
-  ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);
-  ROS_INFO("drive_msg_.curvature = %f", drive_msg_.curvature);
+  if (obstacle_debug) {ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);}
+  if (obstacle_debug) {ROS_INFO("drive_msg_.curvature = %f", drive_msg_.curvature);}
 
   // Display Driving Status
   if ((drive_msg_.velocity == 0) && (speed == 0.0)){
-    ROS_INFO("Status: Stopped");
+    if (obstacle_debug) {ROS_INFO("Status: Stopped");}
   }
   else if (drive_msg_.velocity == 0) {
-    ROS_INFO("Status: Stopping");
+    if (obstacle_debug) {ROS_INFO("Status: Stopping");}
   }
   else { // driving
     if (drive_msg_.curvature == 0) { 
-      ROS_INFO("Status: Driving Straight");
+      if (obstacle_debug) {ROS_INFO("Status: Driving Straight");}
     } else if (drive_msg_.curvature > 0){
-      ROS_INFO("Status: Turning Left");
+      if (obstacle_debug) {ROS_INFO("Status: Turning Left");}
     }
       else if (drive_msg_.curvature < 0){
-      ROS_INFO("Status: Turning Right");
+      if (obstacle_debug) {ROS_INFO("Status: Turning Right");}
     }
   }
 
-  PrintPaths(path_planner_->GetPaths());
+  if (obstacle_debug) {PrintPaths(path_planner_->GetPaths());}
   
-  ROS_INFO("=================END CONTROL==================");    
+  if (obstacle_debug) {ROS_INFO("=================END CONTROL==================");}  
 
 }
 
@@ -349,48 +388,24 @@ void Navigation::Run() {
   // Avoid Obstacles
   ObstacleAvoid();
 
-  // ====================
-  // Define Variables - most of these are global variables that get updated
-  //     during execution
-  // ==================== 
-  // robot.loc = Vector2f(x, y) in map_frame can subscribe to localization msg
-  // Representation of the world
-  // global_graph = a graph of Nodes and edges connect adjacent Nodes
-  //     create global_graph during initialization given map data
-  //     Note: we should probably find a good implementation of c++ A* 
-  //         search and structure global_graph based on this 
-  //         ie. 1) vertex/edges, 2) vertex/neighbors, 3) adjacency matrix
-  // resolution = how spread out nodes are in global_graph
-  // struct Node {
-  //    float id;
-  //    float x; // map_frame
-  //    float y; // map_frame
-  //    bool clear;
-  // } 
-  // global_path = a list of nodes in global_graph which correspond to 
-  //         path to global target
-  // max_separation = how far the robot can get from global path before
-  //           recalculating global path
-  // local_target_radius = how far the local_target is from the robot
-  //     when calculating the intersection between the circle of 
-  //     local_target_radius and the global_path
-
-
+  ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
+  ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
   // ====================
   // Main Path Planning Control
   // ====================
-  // // robot is at global_target
-  // if ((robot.loc - global_target).norm() <= resolution) { // distance to global target
-  //    drive_msg_.velocity = 0;
-  //  } else { // robot is not at global target
-  //     // robot is straying off global path 
-  //     if (distance from global path > max_separation) {
-  //        // do A* search on global_graph from robot.loc to global_target 
-  //        global_path = Plan_Global_Path(robot.loc, global_graph, global_target); 
-  //     }
-  //     // find intersection of circle around robot with global path, return relative coordinates to robot
-  //     relative_local_target = Calculate_Local_Target(robot.loc, global_path, local_target_radius);
-  //  }
+  // robot is at global_target
+  if ((robot_loc_ - global_target).norm() <= resolution) { // distance to global target
+     relative_local_target = Vector2f(0.0, 0.0);
+   } else { // robot is not at global target
+      relative_local_target = Vector2f(2.0, 0.0);
+      // robot is straying off global path 
+      // if (distance from global path > max_separation) {
+      //    // do A* search on global_graph from robot.loc to global_target 
+      //    global_path = Plan_Global_Path(robot.loc, global_graph, global_target); 
+      // }
+      // // find intersection of circle around robot with global path, return relative coordinates to robot
+      // relative_local_target = Calculate_Local_Target(robot.loc, global_path, local_target_radius);
+   }
   
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
