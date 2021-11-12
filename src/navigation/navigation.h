@@ -24,6 +24,7 @@
 
 #include "eigen3/Eigen/Dense"
 #include "object_avoidance.h"
+#include "vector_map/vector_map.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -86,6 +87,8 @@ class Navigation {
 
   void ObstacleAvoid();
 
+  vector_map::VectorMap map_;
+
  private:
 
   // Whether odometry has been initialized.
@@ -124,6 +127,7 @@ class Navigation {
   double latency;
 
   std::unique_ptr<object_avoidance::ObjectAvoidance> path_planner_;
+
 
 };
 

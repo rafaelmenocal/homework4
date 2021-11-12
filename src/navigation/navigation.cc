@@ -29,6 +29,7 @@
 #include "amrl_msgs/Pose2Df.h"
 #include "amrl_msgs/VisualizationMsg.h"
 // #include "amrl_msgs/Localization2DMsg.h"
+#include "math/line2d.h"
 #include "glog/logging.h"
 #include "ros/ros.h"
 #include "shared/math/math_util.h"
@@ -42,6 +43,7 @@ using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
 using std::string;
 using std::vector;
+using geometry::line2d;
 using namespace std;
 
 using namespace math_util;
@@ -78,7 +80,7 @@ bool odometry_debug = false;
   // ==================== 
   float map_x_width = 100.0; // -50.0 to +50.0
   float map_y_height = 100.0;  // -50.0 to +50.0
-  float resolution = 2.0; // meters between nodes
+  float resolution = 0.25; // meters between nodes
   Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
   // float max_path_sep = 1.5; // meters away from path
   float local_target_radius = 3.0; // meters away from robot
@@ -244,18 +246,48 @@ void DrawTargetNode(Eigen::Vector2f loc){
 void OverlayGlobalGraph() {
   for (int i = 0; i < global_graph.cols(); i+=1){
     for (int j = 0; j < global_graph.rows(); j+=1){
-      visualization::DrawPoint(IndexToPoint(Eigen::Vector2i(i, j)), 0x7d7d7d, global_viz_msg_);
+      if (global_graph(i, j) == 1){
+        visualization::DrawPoint(IndexToPoint(Eigen::Vector2i(i, j)), 0x7d7d7d, global_viz_msg_);
+      }
     }
   }
 }
 
-void InitializeGlobalGraph() {
-  ROS_INFO("global_graph.shape = (%ld, %ld)", global_graph.rows(), global_graph.cols());
-  // for (int x_i = 0; x_i < global_graph.cols(); x_i+=1){
-  //   for (int y_i = 0; y_i < global_graph.rows(); y_i+=1){
-  //     global_graph(x_i,y_i) = 0; // add 0 if there is a map line near the node
-  //   }
-  // }
+void UpdateGlobalGraph (geometry::line2f line, float interval) {
+  float x1 = line.p0(0,0);
+  float y1 = line.p0(1,0);
+  float x2 = line.p1(0,0);
+  float y2 = line.p1(1,0);
+
+  float length = (Eigen::Vector2f(x1,y1) - Eigen::Vector2f(x2,y2)).norm();
+  int num_points = int(length / resolution);
+  float x_inc = (x2 - x1) / num_points;
+  float y_inc = (y2 - y1) / num_points;
+
+  // ROS_INFO("line (%f, %f) to (%f, %f)", x1, y1, x2, y2);
+  // ROS_INFO("length = %f", length);
+  // ROS_INFO("increment (%f, %f)", x_inc, y_inc);
+  // ROS_INFO(" number of points = %d", num_points);
+  for (int i = 0; i < num_points; i++){
+    // ROS_INFO("  processing point %d", i);
+    Eigen::Vector2f point = Eigen::Vector2f(x1,y1) + Eigen::Vector2f(i * x_inc, i * y_inc);
+    // ROS_INFO("  point (%f, %f)", point.x(), point.y());
+    Eigen::Vector2i index = PointToIndex(point);
+    // ROS_INFO("  index (%d, %d)", index.x(), index.y());
+    global_graph(index.x(), index.y()) = 0;
+  }
+  // ROS_INFO("  processing last point");
+  Eigen::Vector2i index = PointToIndex(Eigen::Vector2f(x2, y2));
+  global_graph(index.x(), index.y()) = 0;
+}
+
+void InitializeGlobalGraph(vector_map::VectorMap map) {
+  int32_t num_map_lines = (int32_t)map.lines.size();
+  for (int32_t j = 0; j < num_map_lines; j++) {
+    ROS_INFO("processing line %d", j);
+    UpdateGlobalGraph(map.lines[j], resolution);
+  }
+  ROS_INFO("Initialization complete.");
 }
 
 // -------END HELPER FUNCTIONS-------------
@@ -282,7 +314,8 @@ Navigation::Navigation(const string& map_file, const double& latency, ros::NodeH
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
   ros::Time::init();
-  InitializeGlobalGraph();
+  map_.Load(map_file);
+  InitializeGlobalGraph(map_);
 
   // Create ObjectAvoidance object that will manage path calculations
   path_planner_.reset(
@@ -391,8 +424,7 @@ void Navigation::ObstacleAvoid(){
   visualization::DrawRobot(car_width_, car_length_, rear_axle_offset_, car_safety_margin_front_, car_safety_margin_side_, drive_msg_, local_viz_msg_, collision);
   visualization::DrawLocalTarget(relative_local_target, local_viz_msg_);
   visualization::DrawPathOption(drive_msg_.curvature, local_target_radius, 0, local_viz_msg_);
-  visualization::DrawGlobalTarget(global_target, global_viz_msg_);
-
+  
   if (obstacle_debug) {ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);}
   if (obstacle_debug) {ROS_INFO("drive_msg_.curvature = %f", drive_msg_.curvature);}
 
@@ -429,11 +461,14 @@ void Navigation::Run() {
 
   // Avoid Obstacles
   ObstacleAvoid();
-  OverlayGlobalGraph();
+  // OverlayGlobalGraph();
   DrawTargetNode(global_target);
   DrawRobotNode(robot_loc_);
   visualization::DrawArc(Vector2f(0.0, 0.0), local_target_radius, 0, 2.0 * M_PI, 0x0045cf, local_viz_msg_);
-
+  visualization::DrawArc(robot_loc_, resolution, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+  visualization::DrawGlobalTarget(global_target, global_viz_msg_);
+  visualization::DrawLine(robot_loc_, global_target, 0x3ede12, global_viz_msg_);
+  
   // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
   // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
   // ====================
