@@ -36,6 +36,9 @@
 #include "shared/ros/ros_helpers.h"
 #include "navigation.h"
 #include "visualization/visualization.h"
+#include "graph.h"
+// #include "geometry"
+// #include "global_planner.h"
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -43,6 +46,7 @@ using amrl_msgs::VisualizationMsg;
 using std::string;
 using std::vector;
 using geometry::line2d;
+using geometry::MinDistanceLineArc;
 using namespace std;
 
 using namespace math_util;
@@ -78,17 +82,9 @@ float map_y_height = 100.0;  // -50.0 to +50.0
 float resolution = 0.25; // meters between nodes
 float local_target_radius = 3.0; // meters away from robot
 
-struct Node {
-    string id;
-    float x; // map_frame
-    float y; // map_frame
-    std::vector<string> neighbors;
-    bool visited;
-};
-
 Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
-// std::map<std::string, Node> Nodes;
-// std::vector<Node> global_path;
+std::map<std::string, Node*> Nodes;
+std::vector<std::string> global_path;
 // float max_path_sep = 1.5; // meters away from path
 
 } //namespace
@@ -232,20 +228,54 @@ void OverlayGlobalGraph() {
   for (int i = 0; i < global_graph.cols(); i+=1){
     for (int j = 0; j < global_graph.rows(); j+=1){
       if (global_graph(i, j) == 1){
-        visualization::DrawPoint(IndexToPoint(Eigen::Vector2i(i, j)), 0x7d7d7d, global_viz_msg_);
+        Eigen::Vector2f point = IndexToPoint(Eigen::Vector2i(i, j));
+        visualization::DrawPoint(point, 0x3ede12, global_viz_msg_);
+        // visualization::DrawArc(point, 0.2, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
       }
     }
   }
 }
 
-void UpdateGlobalGraph (geometry::line2f line, float interval) {
+void VisualizeMapPoints(vector_map::VectorMap map){
+  int32_t num_map_lines = (int32_t)map.lines.size();
+  for (int32_t j = 0; j < num_map_lines; j++) {
+    ROS_INFO("processing line %d", j);
+    geometry::line2f line = map.lines[j];
+    // float interval = resolution;
+
+    float x1 = line.p0(0,0);
+    float y1 = line.p0(1,0);
+    float x2 = line.p1(0,0);
+    float y2 = line.p1(1,0);
+
+    float length = (Eigen::Vector2f(x1,y1) - Eigen::Vector2f(x2,y2)).norm();
+    int num_points = 2 * int(length / resolution);
+    float x_inc = (x2 - x1) / num_points;
+    float y_inc = (y2 - y1) / num_points;
+
+    for (int i = 0; i < num_points; i++){
+      // ROS_INFO("  processing point %d", i);
+      Eigen::Vector2f point = Eigen::Vector2f(x1,y1) + Eigen::Vector2f(i * x_inc, i * y_inc);
+      // ROS_INFO("  point (%f, %f)", point.x(), point.y());
+      // Eigen::Vector2i index = PointToIndex(point);
+      // ROS_INFO("  index (%d, %d)", index.x(), index.y());
+      visualization::DrawArc(point, 0.05, 0, 2.0 * M_PI, 0xd60b26, global_viz_msg_);
+    }
+  // ROS_INFO("  processing last point");
+  // Eigen::Vector2i index = PointToIndex(Eigen::Vector2f(x2, y2));
+  // global_graph(index.x(), index.y()) = 0;
+  visualization::DrawArc(Eigen::Vector2f(x2, y2), 0.05, 0, 2.0 * M_PI, 0xd60b26, global_viz_msg_); 
+  }
+}
+
+void UpdateGlobalGraph (geometry::line2f line) {
   float x1 = line.p0(0,0);
   float y1 = line.p0(1,0);
   float x2 = line.p1(0,0);
   float y2 = line.p1(1,0);
 
   float length = (Eigen::Vector2f(x1,y1) - Eigen::Vector2f(x2,y2)).norm();
-  int num_points = int(length / resolution);
+  int num_points = 2 * int(length / resolution);
   float x_inc = (x2 - x1) / num_points;
   float y_inc = (y2 - y1) / num_points;
 
@@ -260,26 +290,138 @@ void UpdateGlobalGraph (geometry::line2f line, float interval) {
     Eigen::Vector2i index = PointToIndex(point);
     // ROS_INFO("  index (%d, %d)", index.x(), index.y());
     global_graph(index.x(), index.y()) = 0;
+    // visualization::DrawArc(point, 0.2, 0, 2.0 * M_PI, 0xd60b26, global_viz_msg_);
   }
   // ROS_INFO("  processing last point");
   Eigen::Vector2i index = PointToIndex(Eigen::Vector2f(x2, y2));
   global_graph(index.x(), index.y()) = 0;
+  // visualization::DrawArc(Eigen::Vector2f(x2, y2), 0.2, 0, 2.0 * M_PI, 0xd60b26, global_viz_msg_);
+}
+
+void PrintNeighbors (Node* node){
+  ROS_INFO("node id = %s", node->id.c_str());
+  visualization::DrawArc(Eigen::Vector2f(node->x, node->y), 0.1, 0, 2.0 * M_PI, 0xeb34d2, global_viz_msg_);
+  for (std::string n : node->neighbor_ids){
+    ROS_INFO("  neighbor = %s", n.c_str());
+    Node* node2 = Nodes[n];
+    visualization::DrawArc(Eigen::Vector2f(node2->x, node2->y), 0.1, 0, 2.0 * M_PI, 0xeba534, global_viz_msg_);
+  } 
 }
 
 void InitializeGlobalGraph(vector_map::VectorMap map) {
+  
+  // global_graph initialized to all ones prior to this
   int32_t num_map_lines = (int32_t)map.lines.size();
+
+  // iterate through all the map lines in the graph
   for (int32_t j = 0; j < num_map_lines; j++) {
     ROS_INFO("processing line %d", j);
-    UpdateGlobalGraph(map.lines[j], resolution);
+    // set any cell in global_graph to 0 if map line intersects
+    // that cell
+    UpdateGlobalGraph(map.lines[j]);
+  }  // updated global_graph has 1s for every node and 
+     // zeros corresponding to walls
+
+  // loops through every i, j in global_graph
+  for (int i = 0; i < global_graph.rows(); i++){
+    for (int j = 0; j < global_graph.cols(); j++){
+      if (global_graph(i,j)==1){
+        string id = std::to_string(i) + "," + std::to_string(j);
+        Eigen::Vector2f point = IndexToPoint(Eigen::Vector2i(i,j));
+        //loop through to create list of neighbors
+        std::vector<std::string> neighbor_ids;
+        // std::vector<std::string> path;
+        Node* n = new Node();
+        n->id = id;
+        n->x = point.x();
+        n->y = point.y();
+        // TL  T  TR
+        // L   -  R
+        // BL  B  BR
+        // loops through the adjacent 9 nodes
+        for (int a = i - 1; a <= i + 1; a++){
+          for (int b = j - 1; b <= j + 1; b++){
+            if (((a != i) || (b != j)) // node can't be its own neighbor
+                  && ((a >= 0) && (a < global_graph.rows())) // valid first dimension
+                  && ((b >= 0) && (b < global_graph.cols()))){ // valid second column
+                
+                if (global_graph(a,b) == 1){ // a valid neigbor exists
+                  string n_id = std::to_string(a) + "," + std::to_string(b);
+                  neighbor_ids.push_back(n_id);
+                }
+            }
+          }
+        }
+        n->neighbor_ids = neighbor_ids;
+        Nodes[id] = n;
+      }
+    }
   }
+  
+  // global_path.push_back("50,50");
+  // global_path.push_back("51,50");
+  // global_path.push_back("52,50");
+  // global_path.push_back("53,51");
+  // global_path.push_back("53,52");
 
-  // TODO:
-  // need to loop through global_graph
-  // 1) create nodes
-  // 2) reference global_graph to find valid neighbors
-
+  // ROS_INFO("Matrix.shape = (%ld, %ld)", global_graph.rows(), global_graph.cols());
+  // ROS_INFO("Matrix non-zero size = %f", global_graph.sum());
+  ROS_INFO("Nodes.size() = %ld", Nodes.size());
   ROS_INFO("Initialization complete.");
 }
+
+void DrawGlobalPath() {
+  // ROS_INFO("Printing global_path:");
+  Node* prev_node;
+  bool first_point = true;
+  for (std::string p : global_path){
+    // ROS_INFO("path point = %s", p.c_str());
+    Node* node = Nodes[p];
+    // ROS_INFO("path point loc = (%f, %f)", node.x, node.y);
+    visualization::DrawArc(Eigen::Vector2f(node->x, node->y), 0.1, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+    if (!first_point) {
+      visualization::DrawLine(Eigen::Vector2f(prev_node->x,prev_node->y),Eigen::Vector2f(node->x,node->y), 0x3ede12, global_viz_msg_);
+    }
+    first_point = false;
+    prev_node = node;
+  }
+}
+
+// TODO: find intersection of circle around robot with global path, return relative coordinates to robot
+Eigen::Vector2f Navigation::Calculate_Local_Target() {
+  // given robot_loc_, global_path, and local_target_radius
+
+  Eigen::Vector2f int_point;
+  std::string prev_point;
+  bool first_point = true;
+  for (std::string p : global_path){
+    if(!first_point){
+      // Node* currNode = Nodes[p];
+      // Node* prevNode = Nodes[prev_point];
+      // int_point = geometry::MinDistanceLineArc(Eigen::Vector2f(prevNode->x,prevNode->y), Eigen::Vector2f(currNode->x,currNode->y), Eigen::Vector2f(robot_loc_.x(),robot_loc_.y()), float(0.0), float(2 * M_PI), int(1));
+      // ROS_INFO("intersection_point = (%f, %f)", int_point.x(), int_point.y());
+      // return int_point;
+    }
+    prev_point = p;
+    first_point = false;
+  }
+
+  int_point = Vector2f(3.0,0.0);
+  // Eigen::Vector2f robot_node = IndexToPoint(PointToIndex(robot_loc_));
+  // Eigen::Vector2f target_node = IndexToPoint(PointToIndex(global_target));
+  // Eigen::Vector2f int_point = geometry::MinDistanceLineArc(robot_node, target_node, robot_loc_, 0, 2 * M_PI, 1);
+  ROS_INFO("intersection_point not found = (%f, %f)", int_point.x(), int_point.y());
+  return int_point;
+  // return int_point;
+}
+
+// MinDistanceLineArc(line_point_1,
+//                      line_point_2,
+//                      circle_center_point,
+//                      circle_radius,
+//                      circle_start_angle,
+//                      circle_end_angle,
+//                      const int rotation_sign)
 
 // -------END HELPER FUNCTIONS-------------
 
@@ -313,11 +455,23 @@ Navigation::Navigation(const string& map_file, const double& latency, ros::NodeH
     new object_avoidance::ObjectAvoidance(car_specs_, odd_num_paths, min_turn_radius_));
 }
 
+void Navigation::PlanSimplePath(){
+  global_path.clear();
+  Eigen::Vector2i robot_id = PointToIndex(robot_loc_);
+  global_path.push_back(to_string(robot_id.x()) + "," + to_string(robot_id.y()));
+  Eigen::Vector2i target_id = PointToIndex(global_target);
+  global_path.push_back(to_string(target_id.x()) + "," + to_string(target_id.y()));
+}
+
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_complete_ = false;
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   global_target = loc;
+
+  // temporary functionality: add robots current 
+  // location and target location to global_path
+  PlanSimplePath();
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -337,7 +491,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
     last_odom_angle_ = odom_angle_;
   }
 
-  robot_omega_ = ang_vel; // ?
+  robot_omega_ = ang_vel;
   robot_vel_ = vel;
   odom_loc_ = loc;
   odom_angle_ = angle;
@@ -351,7 +505,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
     speed = VelocityToSpeed(odom_vel_);
     accel = VectorAccelToAccel(odom_accel_);
     del_angle_ = odom_angle_ - last_odom_angle_;
-    odom_omega_ = del_angle_ / del_time; // update_frequency_;
+    odom_omega_ = del_angle_ / del_time;
     critical_time =  speed / max_accel_;
     critical_dist = 0.5 * (critical_time + latency) * max_vel_;
 
@@ -408,7 +562,10 @@ void Navigation::ObstacleAvoid(){
   auto best_path = path_planner_->GetHighestScorePath(); //GetPlannedCurvature();
   drive_msg_.curvature = best_path.curvature;
   drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
-  
+  if (relative_local_target.x() <= 0.0){
+      drive_msg_.curvature = 0.0;
+      drive_msg_.velocity = 0.0;
+  }
   // ---------- Visualizations & Terminal Outputs -----------------
   
   DrawPaths(path_planner_->GetPaths());
@@ -451,34 +608,40 @@ void Navigation::Run() {
   visualization::ClearVisualizationMsg(global_viz_msg_);
 
   // Avoid Obstacles
-  ObstacleAvoid();
+  ObstacleAvoid(); // "0,0" "50,50"
   // OverlayGlobalGraph();
-  DrawTargetNode(global_target);
+  // VisualizeMapPoints(map_);
+  // DrawTargetNode(global_target);
   DrawRobotNode(robot_loc_);
   visualization::DrawArc(Vector2f(0.0, 0.0), local_target_radius, 0, 2.0 * M_PI, 0x0045cf, local_viz_msg_);
-  visualization::DrawArc(robot_loc_, resolution, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+  visualization::DrawArc(robot_loc_, 2 * resolution, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+  DrawGlobalPath();
   visualization::DrawGlobalTarget(global_target, global_viz_msg_);
-  visualization::DrawLine(robot_loc_, global_target, 0x3ede12, global_viz_msg_);
+  // visualization::DrawLine(robot_loc_, global_target, 0x3ede12, global_viz_msg_);
   
+  // Debugging to see neighbors are accurate:
+  // Eigen::Vector2i index = PointToIndex(global_target);
+  // Node* n = Nodes[to_string(index.x()) + "," + to_string(index.y())];
+  // PrintNeighbors(n);
+
   // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
   // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
 
+  // TODO: find out why the car turns right with no laser observations or manually fix
+  
   // robot is at global_target
-  if ((robot_loc_ - global_target).norm() <= resolution) { // distance to global target
-    //  relative_local_target = Vector2f(0.0, 0.0); // TODO: find out why car turns right
-     drive_msg_.velocity = 0;
+  if ((robot_loc_ - global_target).norm() <= 2 * resolution) { // distance to global target
+     relative_local_target = Vector2f(0.0, 0.0);
    } else { // robot is not at global target
       
       // robot is straying off global path 
       // if (distance from global path > max_separation) {
       //    // do A* search on global_graph from robot.loc to global_target 
-      //    global_path = Plan_Global_Path(robot.loc, global_graph, global_target); 
+      //    global_path = Plan_Global_Path(robot.loc, global_target, Nodes); 
+      //    PlanSimplePath();
       // }
       
-      // TODO:
-      // find intersection of circle around robot with global path, return relative coordinates to robot
-      // relative_local_target = Calculate_Local_Target(robot.loc, global_path, local_target_radius);
-      relative_local_target = Vector2f(3.0, 0.0);
+      relative_local_target = Calculate_Local_Target();
    }
   
   // Add timestamps to all messages.

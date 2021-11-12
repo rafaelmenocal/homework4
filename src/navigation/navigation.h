@@ -24,6 +24,8 @@
 
 #include "eigen3/Eigen/Dense"
 #include "object_avoidance.h"
+// #include "global_planner.h"
+// #include "graph.h"
 #include "vector_map/vector_map.h"
 
 #ifndef NAVIGATION_H
@@ -86,6 +88,10 @@ class Navigation {
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
 
   void ObstacleAvoid();
+
+  void PlanSimplePath();
+
+  Eigen::Vector2f Calculate_Local_Target();
 
   vector_map::VectorMap map_;
 
