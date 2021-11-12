@@ -74,37 +74,24 @@ double current_time;
 double del_time;
 bool obstacle_debug = false;
 bool odometry_debug = false;
-// ====================
-  // Define Variables - most of these are global variables that get updated
-  //     during execution
-  // ==================== 
-  float map_x_width = 100.0; // -50.0 to +50.0
-  float map_y_height = 100.0;  // -50.0 to +50.0
-  float resolution = 0.25; // meters between nodes
-  Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
-  // float max_path_sep = 1.5; // meters away from path
-  float local_target_radius = 3.0; // meters away from robot
 
-  // Representation of the world
-  // global_graph = a graph of Nodes and edges connect adjacent Nodes
-  //     create global_graph during initialization given map data
-  //     Note: we should probably find a good implementation of c++ A* 
-  //         search and structure global_graph based on this 
-  //         ie. 1) vertex/edges, 2) vertex/neighbors, 3) adjacency matrix
-  // resolution = how spread out nodes are in global_graph
-  // struct Node {
-  //    float id;
-  //    float x; // map_frame
-  //    float y; // map_frame
-  //    bool clear;
-  // } 
-  // global_path = a list of nodes in global_graph which correspond to 
-  //         path to global target
-  // max_separation = how far the robot can get from global path before
-  //           recalculating global path
-  // local_target_radius = how far the local_target is from the robot
-  //     when calculating the intersection between the circle of 
-  //     local_target_radius and the global_path
+float map_x_width = 100.0; // -50.0 to +50.0
+float map_y_height = 100.0;  // -50.0 to +50.0
+float resolution = 0.25; // meters between nodes
+float local_target_radius = 3.0; // meters away from robot
+
+struct Node {
+    string id;
+    float x; // map_frame
+    float y; // map_frame
+    std::vector<string> neighbors;
+    bool visited;
+}
+
+Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
+// std::map<std::string, Node> Nodes;
+// std::vector<Node> global_path;
+// float max_path_sep = 1.5; // meters away from path
 
 } //namespace
 
@@ -287,6 +274,12 @@ void InitializeGlobalGraph(vector_map::VectorMap map) {
     ROS_INFO("processing line %d", j);
     UpdateGlobalGraph(map.lines[j], resolution);
   }
+
+  // TODO:
+  // need to loop through global_graph
+  // 1) create nodes
+  // 2) reference global_graph to find valid neighbors
+
   ROS_INFO("Initialization complete.");
 }
 
@@ -471,22 +464,23 @@ void Navigation::Run() {
   
   // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
   // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
-  // ====================
-  // Main Path Planning Control
-  // ====================
+
   // robot is at global_target
   if ((robot_loc_ - global_target).norm() <= resolution) { // distance to global target
-    //  relative_local_target = Vector2f(0.0, 0.0);
+    //  relative_local_target = Vector2f(0.0, 0.0); // TODO: find out why car turns right
      drive_msg_.velocity = 0;
    } else { // robot is not at global target
-      relative_local_target = Vector2f(3.0, 0.0);
+      
       // robot is straying off global path 
       // if (distance from global path > max_separation) {
       //    // do A* search on global_graph from robot.loc to global_target 
       //    global_path = Plan_Global_Path(robot.loc, global_graph, global_target); 
       // }
-      // // find intersection of circle around robot with global path, return relative coordinates to robot
+      
+      // TODO:
+      // find intersection of circle around robot with global path, return relative coordinates to robot
       // relative_local_target = Calculate_Local_Target(robot.loc, global_path, local_target_radius);
+      relative_local_target = Vector2f(3.0, 0.0);
    }
   
   // Add timestamps to all messages.
