@@ -28,7 +28,6 @@
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "amrl_msgs/VisualizationMsg.h"
-// #include "amrl_msgs/Localization2DMsg.h"
 #include "math/line2d.h"
 #include "glog/logging.h"
 #include "ros/ros.h"
@@ -62,7 +61,6 @@ float critical_dist = 0.0;
 float speed = 0.0;
 float accel = 0.0;
 bool collision = false;
-// float latency; // -0.2;
 float del_angle_ = 0.0;
 std::vector<Vector2f> proj_point_cloud_;
 std::vector<Vector2f> drawn_point_cloud_;
@@ -86,7 +84,7 @@ struct Node {
     float y; // map_frame
     std::vector<string> neighbors;
     bool visited;
-}
+};
 
 Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
 // std::map<std::string, Node> Nodes;
