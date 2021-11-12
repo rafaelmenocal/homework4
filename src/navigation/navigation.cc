@@ -89,6 +89,7 @@ bool odometry_debug = false;
   //     Note: we should probably find a good implementation of c++ A* 
   //         search and structure global_graph based on this 
   //         ie. 1) vertex/edges, 2) vertex/neighbors, 3) adjacency matrix
+  //          We want nodes with neighbor lists
   // resolution = how spread out nodes are in global_graph
   // struct Node {
   //    float id;
