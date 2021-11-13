@@ -91,6 +91,8 @@ class Navigation {
 
   void PlanSimplePath();
 
+  void PlanGlobalPath();
+
   Eigen::Vector2f Calculate_Local_Target();
   
   Eigen::Vector2f DrawIntersectionPoints(Eigen::Vector2f A, 

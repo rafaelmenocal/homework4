@@ -358,11 +358,11 @@ void InitializeGlobalGraph(vector_map::VectorMap map) {
     }
   }
   
-  // global_path.push_back("50,50");
-  // global_path.push_back("51,50");
-  // global_path.push_back("52,50");
-  // global_path.push_back("53,51");
-  // global_path.push_back("53,52");
+  global_path.push_back("50,50");
+  global_path.push_back("51,50");
+  global_path.push_back("52,50");
+  global_path.push_back("53,51");
+  global_path.push_back("53,52");
 
   // ROS_INFO("Matrix.shape = (%ld, %ld)", global_graph.rows(), global_graph.cols());
   // ROS_INFO("Matrix non-zero size = %f", global_graph.sum());
@@ -536,6 +536,19 @@ void Navigation::PlanSimplePath(){
   global_path.push_back(to_string(target_id.x()) + "," + to_string(target_id.y()));
 }
 
+//update global_path
+void Navigation::PlanGlobalPath(){
+  // global_path.clear();
+  // Eigen::Vector2i robot_id = PointToIndex(robot_loc_);
+  // Eigen::Vector2i target_id = PointToIndex(global_target);
+  // Given robot_id, target_id, Nodes, => update global_path
+  // to be a std::vector of std::strings of ids, ie. "10,10"
+
+  // global_path.push_back(to_string(robot_id.x()) + "," + to_string(robot_id.y()));
+  // example accessing a node pointer Nodes["10,10"]->.neighbor_ids
+  // global_path.push_back(to_string(target_id.x()) + "," + to_string(target_id.y()));
+}
+
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_complete_ = false;
   nav_goal_loc_ = loc;
@@ -545,6 +558,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   // temporary functionality: add robots current 
   // location and target location to global_path
   PlanSimplePath();
+  // PlanGlobalPath();
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -724,7 +738,7 @@ void Navigation::Run() {
       }
       if(relative_local_target == Eigen::Vector2f(0.0,0.0)){
         PlanSimplePath();
-        ROS_INFO("Planned Simple Path");
+        // PlanGlobalPath();
         Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
         Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
         relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
