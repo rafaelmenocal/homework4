@@ -3,6 +3,10 @@
 
 #include "graph.h"
 #include <cmath>
+#include <queue>
+#include <string>
+
+using std::string;
 
 // The graph needs to be a global variable. This may not be the best place for it, but it's here temporarily.
 vector<Node*> graph;
@@ -23,22 +27,24 @@ float distance(Node* n1, Node* n2) {
 }
 
 // Prepares all nodes to run A*.
-void a_star_prep(Node* goal, std::map<std::string, Node*> Nodes) {
+void a_star_prep(Node* goal, std::map<std::string, Node*> &Nodes) {
     for (auto it = Nodes.begin(); it != Nodes.end(); it++) {
         // Add heuristic costs to every node in the graph
         // The heuristic is inversely proportional to the distance from the goal.
         it->second->heuristic = 1 / distance(it->second, goal);
         // Reset the nodes, as well
-       // When going through all the nodes, clear their "path" vectors
-        it->second->path.clear();
+        // When going through all the nodes, clear their "path" vectors
+        it->second->path_ids.clear();
         // And set all their "visited" markers to be false
+        it->second->marked = false;
         it->second->cost = -1;
     }
 }
 
 // Uses the A* algorithm to find the shortest path between two nodes,
 // Using a heuristic weight for each node inversely proportional to the distance from the goal.
-    std::priority_queue<Node*>, vector<Node*>, CompareNode> PQ;
+vector<string> a_star(Node* start, Node* goal, std::map<std::string, Node*> &Nodes) {
+    std::priority_queue<Node*, vector<Node*>, CompareNode> PQ;
     a_star_prep(goal, Nodes);
 
     //Add start to the priorityqueue
@@ -49,7 +55,7 @@ void a_star_prep(Node* goal, std::map<std::string, Node*> Nodes) {
         Node *currentNode = PQ.top();
         // If first node in queue is the goal, we've found the best path!
         if (currentNode == goal) {
-            return goal.path;
+            return goal->path_ids;
         }
 
         // If the first node isn't "visited"
@@ -57,16 +63,16 @@ void a_star_prep(Node* goal, std::map<std::string, Node*> Nodes) {
             // Note that it is possible for the node to be "visited", 
             // as there can be duplicates in the PQ if multiple paths get to the same node
             currentNode->marked = true;
-            for (String n : currentNode->neighbors) {
+            for (string n : currentNode->neighbor_ids) {
                 Node* neighbor = Nodes[n];
                 if (!neighbor->marked) {
-                    if (neighbor->cost == -1 || ->cost > currentNode->cost + 1) {
+                    if (neighbor->cost == -1 || currentNode->cost > currentNode->cost + 1) {
                         // If they aren't in the PQ, or if we've just found a better path, add them to the PQ
                         // Don't worry about duplicates, we will only use each node once 
                         // (when we've found the optimal path to it)
                         neighbor->cost = currentNode->cost + 1;
                         neighbor->path_ids = currentNode->path_ids;
-                        neighbor->path_ids.push(currentNode->id)
+                        neighbor->path_ids.push_back(currentNode->id);
                         PQ.push(neighbor);
                     }
                 }
@@ -76,14 +82,21 @@ void a_star_prep(Node* goal, std::map<std::string, Node*> Nodes) {
         PQ.pop();
     }
     // If we get to this part of the code, the queue is empty. This means there is no path to the goal.
+    return vector<string>();
+}
+
+// Returns the index in a vector of a matrix element at location (x, y)
+// Doesn't matter whether we consider row-based or column-based indexing as long as we're consistent
+int PointToIndex(int x, int y, int x_dim, int y_dim){
+  return x * y_dim + y; 
 }
 
 // Uses the A* algorithm to find the shortest path between two nodes,
 // Using a heuristic weight for each node inversely proportional to the distance from the goal.
-vector<Node*> a_star_local_vars(Node* start, Node* goal, std::map<std::string, Node*> &Nodes, int x_dim, int y_dim) {
+vector<string> a_star_local_vars(Node* start, Node* goal, std::map<std::string, Node*> &Nodes, int x_dim, int y_dim) {
 
     std::vector<float> costs = std::vector<float>(x_dim * y_dim, 0.0);
-    std::vector<std::vector<String>> paths = std::vector<std::vector<String>>(x_dim * y_dim, std::vector<String>());
+    std::vector<std::vector<string>> paths = std::vector<std::vector<string>>(x_dim * y_dim, std::vector<string>());
     std::vector<bool> markings = std::vector<bool>(x_dim * y_dim, false);
     std::vector<float> heuristics = std::vector<float>(x_dim * y_dim, 0.0);
 
@@ -107,7 +120,7 @@ vector<Node*> a_star_local_vars(Node* start, Node* goal, std::map<std::string, N
             // Note that it is possible for the node to be "visited", 
             // as there can be duplicates in the PQ if multiple paths get to the same node
             markings[cnIndex] = true;
-            for (String n : currentNode->neighbors) {
+            for (string n : currentNode->neighbor_ids) {
                 Node* neighbor = Nodes[n];
                 int neighborIndex = PointToIndex(neighbor->x, neighbor->y, x_dim, y_dim);
                 if (!markings[neighborIndex]) {
@@ -118,7 +131,7 @@ vector<Node*> a_star_local_vars(Node* start, Node* goal, std::map<std::string, N
                         //Update cost, then update the path to include the current best path
                         costs[neighborIndex] = costs[cnIndex] + 1;
                         paths[neighborIndex] = paths[cnIndex];
-                        paths[neighborIndex].push(currentNode->id)
+                        paths[neighborIndex].push_back(currentNode->id);
                         PQ.push(neighbor);
                     }
                 }
@@ -128,13 +141,9 @@ vector<Node*> a_star_local_vars(Node* start, Node* goal, std::map<std::string, N
         PQ.pop();
     }
     // If we get to this part of the code, the queue is empty. This means there is no path to the goal.
+    return vector<string>();
 }
 
-// Returns the index in a vector of a matrix element at location (x, y)
-// Doesn't matter whether we consider row-based or column-based indexing as long as we're consistent
-int PointToIndex(int x, int y, x_dim, y_dim){
-  return x * y_dim + y; 
-}
 
 
 #endif //__SRC_NAVIGATION_GLOBAL_PLANNER__

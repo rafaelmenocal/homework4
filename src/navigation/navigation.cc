@@ -38,7 +38,7 @@
 #include "visualization/visualization.h"
 #include "graph.h"
 // #include "geometry"
-// #include "global_planner.h"
+#include "global_planner.h"
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -538,15 +538,33 @@ void Navigation::PlanSimplePath(){
 
 //update global_path
 void Navigation::PlanGlobalPath(){
-  // global_path.clear();
-  // Eigen::Vector2i robot_id = PointToIndex(robot_loc_);
-  // Eigen::Vector2i target_id = PointToIndex(global_target);
+  global_path.clear();
+  
+  Eigen::Vector2i robot_id = PointToIndex(robot_loc_);
+  string robot_name = to_string(robot_id.x()) +  "," + to_string(robot_id.y());
+  Node* robot = Nodes[robot_name];
+
+  Eigen::Vector2i target_id = PointToIndex(global_target);
+  string target_name = to_string(target_id.x()) +  "," + to_string(target_id.y());
+  Node* target = Nodes[target_name];
+  
   // Given robot_id, target_id, Nodes, => update global_path
   // to be a std::vector of std::strings of ids, ie. "10,10"
+  string message = "Running A* with robot position " + robot_name + " and target " + target_name;
+  ROS_INFO("%s", message.c_str());
 
-  // global_path.push_back(to_string(robot_id.x()) + "," + to_string(robot_id.y()));
+  std::vector<std::string> result = a_star(robot, target, Nodes);
+  
+  message = "Ran A*, got result";
+  for (string s : result) {
+    message = message + " " + s;
+  }
+  ROS_INFO("%s", message.c_str());
+
+  global_path.push_back(robot_name);
   // example accessing a node pointer Nodes["10,10"]->.neighbor_ids
-  // global_path.push_back(to_string(target_id.x()) + "," + to_string(target_id.y()));
+  global_path.insert(global_path.end(), result.begin(), result.end());
+  global_path.push_back(target_name);
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -557,8 +575,8 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
 
   // temporary functionality: add robots current 
   // location and target location to global_path
-  PlanSimplePath();
-  // PlanGlobalPath();
+  // PlanSimplePath();
+  PlanGlobalPath();
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -648,7 +666,8 @@ void Navigation::ObstacleAvoid(){
   path_planner_->UpdatePaths(point_cloud_, relative_local_target);
   auto best_path = path_planner_->GetHighestScorePath(); //GetPlannedCurvature();
   drive_msg_.curvature = best_path.curvature;
-  drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
+  //drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
+  drive_msg_.velocity = 0.0;
   // if (relative_local_target.x() <= 0.0){
   if (relative_local_target == Eigen::Vector2f(0.0,0.0)){
       drive_msg_.curvature = 0.0;
@@ -737,11 +756,12 @@ void Navigation::Run() {
         relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
       }
       if(relative_local_target == Eigen::Vector2f(0.0,0.0)){
-        PlanSimplePath();
-        // PlanGlobalPath();
-        Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
-        Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
-        relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
+        //PlanSimplePath();
+        PlanGlobalPath();
+        DrawGlobalPath();
+        //Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
+        //Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
+        //relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
       }
       // relative_local_target = Eigen::Vector2f(2.0, 0.0); //Calculate_Local_Target();
    }
