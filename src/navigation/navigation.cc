@@ -80,7 +80,7 @@ bool odometry_debug = false;
 float map_x_width = 100.0; // -50.0 to +50.0
 float map_y_height = 100.0;  // -50.0 to +50.0
 float resolution = 0.25; // meters between nodes
-float local_target_radius = 3.0; // meters away from robot
+float local_target_radius = 2.0; // meters away from robot
 
 Eigen::MatrixXf global_graph = Eigen::MatrixXf::Ones(1 + int(map_x_width/resolution), 1 + int(map_y_height/resolution));
 std::map<std::string, Node*> Nodes;
@@ -387,31 +387,104 @@ void DrawGlobalPath() {
   }
 }
 
+// Draw intersection points of line A to B that intersect circle c
+// https://stackoverflow.com/questions/1073336/circle-line-segment-collision-detection-algorithm
+Eigen::Vector2f Navigation::DrawIntersectionPoints(Eigen::Vector2f A, 
+                                        Eigen::Vector2f B,
+                                        Eigen::Vector2f C,
+                                        float r) {
+  Eigen::Rotation2Df rot(-robot_angle_);
+  float Ax = A.x();
+  float Ay = A.y();
+  float Bx = B.x();
+  float By = B.y();
+  float Cx = C.x();
+  float Cy = C.y();
+
+  // compute the euclidean distance between A and B
+  float LAB = sqrt(pow(Bx-Ax,2) + pow(By-Ay,2));
+
+  // compute the direction vector D from A to B
+  float Dx = (Bx-Ax) / LAB;
+  float Dy = (By-Ay) / LAB;
+
+  // the equation of the line AB is x = Dx*t + Ax, y = Dy*t + Ay with 0 <= t <= LAB.
+
+  // compute the distance between the points A and E, where
+  // E is the point of AB closest the circle center (Cx, Cy)
+  float t = Dx * (Cx-Ax) + Dy * (Cy-Ay);    
+
+  // compute the coordinates of the point E
+  float Ex = t * Dx + Ax;
+  float Ey = t * Dy + Ay;
+
+  // compute the euclidean distance between E and C
+  float LEC = sqrt(pow(Ex-Cx,2) + pow(Ey-Cy,2));
+
+  // test if the line intersects the circle
+  if (LEC < r) {
+      // compute distance from t to circle intersection point
+      float dt = sqrt(pow(r,2) - pow(LEC,2));
+
+      // compute first intersection point
+      // float Fx = (t-dt) * Dx + Ax;
+      // float Fy = (t-dt) * Dy + Ay;
+      // visualization::DrawCross(Eigen::Vector2f(Fx, Fy), 0.15, 0x0045cf, global_viz_msg_);
+
+      // compute second intersection point
+      float Gx = (t+dt) * Dx + Ax;
+      float Gy = (t+dt) * Dy + Ay;
+      // ROS_INFO("Far Intersection Point = (%f, %f)", Gx-robot_loc_.x(), Gy-robot_loc_.y());
+
+      visualization::DrawCross(rot * Eigen::Vector2f(Gx-robot_loc_.x(), Gy-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
+      return rot * Eigen::Vector2f(Gx-robot_loc_.x(),Gy-robot_loc_.y());
+  } else if( LEC == r ) { // else test if the line is tangent to circle
+      // tangent point to circle is E
+      // ROS_INFO("Tagent Intersection Point = (%f, %f)", Ex-robot_loc_.x(), Ey-robot_loc_.y());
+      visualization::DrawCross(rot * Eigen::Vector2f(Ex - robot_loc_.x(), Ey-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
+      return rot * Eigen::Vector2f(Ex-robot_loc_.x(), Ey-robot_loc_.y());
+  } else {
+      // line doesn't touch circle
+      // ROS_INFO("No intersection");
+      return Eigen::Vector2f(0.0,0.0);
+  }    
+}
+
 // TODO: find intersection of circle around robot with global path, return relative coordinates to robot
 Eigen::Vector2f Navigation::Calculate_Local_Target() {
   // given robot_loc_, global_path, and local_target_radius
 
-  Eigen::Vector2f int_point;
+  float min_distance;
   std::string prev_point;
   bool first_point = true;
   for (std::string p : global_path){
     if(!first_point){
-      // Node* currNode = Nodes[p];
-      // Node* prevNode = Nodes[prev_point];
-      // int_point = geometry::MinDistanceLineArc(Eigen::Vector2f(prevNode->x,prevNode->y), Eigen::Vector2f(currNode->x,currNode->y), Eigen::Vector2f(robot_loc_.x(),robot_loc_.y()), float(0.0), float(2 * M_PI), int(1));
+      Node* currNode = Nodes[p];
+      Node* prevNode = Nodes[prev_point];
+      min_distance = geometry::MinDistanceLineArc(Eigen::Vector2f(prevNode->x,prevNode->y), 
+                                               Eigen::Vector2f(currNode->x,currNode->y), 
+                                               Eigen::Vector2f(robot_loc_.x(),robot_loc_.y()), 
+                                               float(3.0),
+                                               float(0.0), 
+                                               float(2.0 * M_PI), 
+                                               1);
       // ROS_INFO("intersection_point = (%f, %f)", int_point.x(), int_point.y());
+      ROS_INFO("currNode = (%f,%f)",currNode->x,currNode->y);
+      ROS_INFO("prevNode = (%f,%f)",prevNode->x,prevNode->y);
+      ROS_INFO("robot loc = (%f, %f)", robot_loc_.x(), robot_loc_.y());
+      ROS_INFO("min_distance = %f", min_distance);
       // return int_point;
     }
     prev_point = p;
     first_point = false;
   }
 
-  int_point = Vector2f(3.0,0.0);
+  // int_point = Vector2f(3.0,0.0);
   // Eigen::Vector2f robot_node = IndexToPoint(PointToIndex(robot_loc_));
   // Eigen::Vector2f target_node = IndexToPoint(PointToIndex(global_target));
   // Eigen::Vector2f int_point = geometry::MinDistanceLineArc(robot_node, target_node, robot_loc_, 0, 2 * M_PI, 1);
-  ROS_INFO("intersection_point not found = (%f, %f)", int_point.x(), int_point.y());
-  return int_point;
+  // ROS_INFO("intersection_point not found = (%f, %f)", int_point.x(), int_point.y());
+  return Vector2f(3.0,0.0);
   // return int_point;
 }
 
@@ -562,7 +635,8 @@ void Navigation::ObstacleAvoid(){
   auto best_path = path_planner_->GetHighestScorePath(); //GetPlannedCurvature();
   drive_msg_.curvature = best_path.curvature;
   drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
-  if (relative_local_target.x() <= 0.0){
+  // if (relative_local_target.x() <= 0.0){
+  if (relative_local_target == Eigen::Vector2f(0.0,0.0)){
       drive_msg_.curvature = 0.0;
       drive_msg_.velocity = 0.0;
   }
@@ -570,7 +644,7 @@ void Navigation::ObstacleAvoid(){
   
   DrawPaths(path_planner_->GetPaths());
   visualization::DrawRobot(car_width_, car_length_, rear_axle_offset_, car_safety_margin_front_, car_safety_margin_side_, drive_msg_, local_viz_msg_, collision);
-  visualization::DrawLocalTarget(relative_local_target, local_viz_msg_);
+  // visualization::DrawLocalTarget(relative_local_target, local_viz_msg_);
   visualization::DrawPathOption(drive_msg_.curvature, local_target_radius, 0, local_viz_msg_);
   
   if (obstacle_debug) {ROS_INFO("drive_msg_.velocity = %f", drive_msg_.velocity);}
@@ -607,16 +681,17 @@ void Navigation::Run() {
   visualization::ClearVisualizationMsg(local_viz_msg_);
   visualization::ClearVisualizationMsg(global_viz_msg_);
 
-  // Avoid Obstacles
-  ObstacleAvoid(); // "0,0" "50,50"
+  ObstacleAvoid(); //
   // OverlayGlobalGraph();
   // VisualizeMapPoints(map_);
   // DrawTargetNode(global_target);
-  DrawRobotNode(robot_loc_);
+  // DrawRobotNode(robot_loc_);
   visualization::DrawArc(Vector2f(0.0, 0.0), local_target_radius, 0, 2.0 * M_PI, 0x0045cf, local_viz_msg_);
-  visualization::DrawArc(robot_loc_, 2 * resolution, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
-  DrawGlobalPath();
-  visualization::DrawGlobalTarget(global_target, global_viz_msg_);
+  // visualization::DrawArc(robot_loc_, 2 * resolution, 0, 2.0 * M_PI, 0x3ede12, global_viz_msg_);
+  if (global_target != Eigen::Vector2f(0.0,0.0)){
+    DrawGlobalPath();
+  }
+  // visualization::DrawGlobalTarget(global_target, global_viz_msg_);
   // visualization::DrawLine(robot_loc_, global_target, 0x3ede12, global_viz_msg_);
   
   // Debugging to see neighbors are accurate:
@@ -624,13 +699,15 @@ void Navigation::Run() {
   // Node* n = Nodes[to_string(index.x()) + "," + to_string(index.y())];
   // PrintNeighbors(n);
 
+
   // ROS_INFO("robot_loc_ = (%f, %f)", robot_loc_.x(), robot_loc_.y());
   // ROS_INFO("distance to global_target = %f",(robot_loc_ - global_target).norm());
 
   // TODO: find out why the car turns right with no laser observations or manually fix
   
+  // ROS_INFO("relative_local_target = (%f, %f)", relative_local_target.x(), relative_local_target.y());
   // robot is at global_target
-  if ((robot_loc_ - global_target).norm() <= 2 * resolution) { // distance to global target
+  if ((global_target == Eigen::Vector2f(0.0,0.0)) || ((robot_loc_ - global_target).norm() <= 2 * resolution)) { // distance to global target
      relative_local_target = Vector2f(0.0, 0.0);
    } else { // robot is not at global target
       
@@ -640,8 +717,19 @@ void Navigation::Run() {
       //    global_path = Plan_Global_Path(robot.loc, global_target, Nodes); 
       //    PlanSimplePath();
       // }
-      
-      relative_local_target = Calculate_Local_Target();
+      if (!global_path.empty()){
+        Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
+        Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
+        relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
+      }
+      if(relative_local_target == Eigen::Vector2f(0.0,0.0)){
+        PlanSimplePath();
+        ROS_INFO("Planned Simple Path");
+        Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
+        Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
+        relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
+      }
+      // relative_local_target = Eigen::Vector2f(2.0, 0.0); //Calculate_Local_Target();
    }
   
   // Add timestamps to all messages.
