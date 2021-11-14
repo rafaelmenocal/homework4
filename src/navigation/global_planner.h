@@ -2,6 +2,7 @@
 #define __SRC_NAVIGATION_GLOBAL_PLANNER__
 
 #include "graph.h"
+#include "simple_queue.h"
 #include <cmath>
 #include <queue>
 #include <string>
@@ -31,7 +32,7 @@ void a_star_prep(Node* goal, std::map<std::string, Node*> &Nodes) {
     for (auto it = Nodes.begin(); it != Nodes.end(); it++) {
         // Add heuristic costs to every node in the graph
         // The heuristic is inversely proportional to the distance from the goal.
-        it->second->heuristic = 1 / distance(it->second, goal);
+        it->second->heuristic = distance(it->second, goal);
         // Reset the nodes, as well
         // When going through all the nodes, clear their "path" vectors
         it->second->path_ids.clear();
@@ -100,15 +101,22 @@ vector<string> a_star_local_vars(Node* start, Node* goal, std::map<std::string, 
     std::vector<bool> markings = std::vector<bool>(x_dim * y_dim, false);
     std::vector<float> heuristics = std::vector<float>(x_dim * y_dim, 0.0);
 
+    for (auto it = Nodes.begin(); it != Nodes.end(); it++) {
+        // Add heuristic costs to every node in the graph
+        // The heuristic is inversely proportional to the distance from the goal.
+        heuristics[PointToIndex(it->second->x, it->second->y, x_dim, y_dim)] = 
+                                                                -1 * distance(it->second, goal);
+    }
+
     //Create priority queue
-    std::priority_queue<Node*, vector<Node*>, CompareNode> PQ;
+    SimpleQueue<Node*, float> PQ;
 
     //Add start to the priorityqueue
-    PQ.push(start);
+    PQ.Push(start, 0);
 
     //While queue isn't empty
-    while (!PQ.empty()) {
-        Node *currentNode = PQ.top();
+    while (!PQ.Empty()) {
+        Node *currentNode = PQ.Pop(); //Access and remove
         int cnIndex = PointToIndex(currentNode->x, currentNode->y, x_dim, y_dim);
         // If first node in queue is the goal, we've found the best path!
         if (currentNode == goal) {
@@ -132,13 +140,11 @@ vector<string> a_star_local_vars(Node* start, Node* goal, std::map<std::string, 
                         costs[neighborIndex] = costs[cnIndex] + 1;
                         paths[neighborIndex] = paths[cnIndex];
                         paths[neighborIndex].push_back(currentNode->id);
-                        PQ.push(neighbor);
+                        PQ.Push(neighbor, costs[neighborIndex] + heuristics[neighborIndex]);
                     }
                 }
             }
         }
-        // Pop the currentNode to remove it from the queue
-        PQ.pop();
     }
     // If we get to this part of the code, the queue is empty. This means there is no path to the goal.
     return vector<string>();

@@ -554,6 +554,8 @@ void Navigation::PlanGlobalPath(){
   ROS_INFO("%s", message.c_str());
 
   std::vector<std::string> result = a_star(robot, target, Nodes);
+  /* std::vector<std::string> result = a_star_local_vars(robot, target, 
+                                  Nodes, global_graph.rows(), global_graph.cols()); */
   
   message = "Ran A*, got result";
   for (string s : result) {
@@ -666,8 +668,8 @@ void Navigation::ObstacleAvoid(){
   path_planner_->UpdatePaths(point_cloud_, relative_local_target);
   auto best_path = path_planner_->GetHighestScorePath(); //GetPlannedCurvature();
   drive_msg_.curvature = best_path.curvature;
-  //drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
-  drive_msg_.velocity = 0.0;
+  drive_msg_.velocity = CalculateVelocityMsg(point_cloud_, car_specs_, best_path.free_path_lengthv2, critical_dist, max_vel_);
+  //drive_msg_.velocity = 0.0;
   // if (relative_local_target.x() <= 0.0){
   if (relative_local_target == Eigen::Vector2f(0.0,0.0)){
       drive_msg_.curvature = 0.0;
