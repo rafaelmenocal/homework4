@@ -92,6 +92,8 @@ class Navigation {
   void PlanSimplePath();
 
   void PlanGlobalPath();
+  
+  Eigen::Vector2f FindIntersectionPoints();
 
   Eigen::Vector2f Calculate_Local_Target();
   
