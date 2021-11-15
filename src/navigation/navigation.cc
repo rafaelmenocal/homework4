@@ -439,14 +439,27 @@ Eigen::Vector2f Navigation::DrawIntersectionPoints(Eigen::Vector2f A,
       // ROS_INFO("Far Intersection Point = (%f, %f)", Gx-robot_loc_.x(), Gy-robot_loc_.y());
       // bool intersects = geometry::line2d::Intersection(A,B,Eigen::Vector2f(Gx,Gy));
       // ROS_INFO("Far Intersection Point %d", intersects);
-      
-      visualization::DrawCross(rot * Eigen::Vector2f(Gx-robot_loc_.x(), Gy-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
-      return rot * Eigen::Vector2f(Gx-robot_loc_.x(),Gy-robot_loc_.y());
+      ROS_INFO("A = (%f, %f)", Ax, Ay);
+      ROS_INFO("B = (%f, %f)", Bx, By);
+      ROS_INFO("G = (%f, %f)", Gx, Gy);
+
+      // TODO: handle when intersection point is past last segment in global path
+       
+      if ((((Gx >= Ax) && (Gx <= Bx)) || ((Gx <= Ax) && (Gx >= Bx))) &&
+            (((Gy >= Ay) && (Gy <= By)) || ((Gy <= Ay) && (Gy >= By)))) {
+        ROS_INFO("Far Intersection Point intersets");
+        // visualization::DrawCross(rot * Eigen::Vector2f(Gx-robot_loc_.x(), Gy-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
+        return rot * Eigen::Vector2f(Gx-robot_loc_.x(),Gy-robot_loc_.y());
+      } else {
+        ROS_INFO("Far Intersection Point does not intersect");
+        return Eigen::Vector2f(0.0,0.0);
+      }
   } else if( LEC == r ) { // else test if the line is tangent to circle
       // tangent point to circle is E
       ROS_INFO("Tagent Intersection Point");
-      visualization::DrawCross(rot * Eigen::Vector2f(Ex - robot_loc_.x(), Ey-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
-      return rot * Eigen::Vector2f(Ex-robot_loc_.x(), Ey-robot_loc_.y());
+      // visualization::DrawCross(rot * Eigen::Vector2f(Ex - robot_loc_.x(), Ey-robot_loc_.y()), 0.15, 0x0045cf, local_viz_msg_);
+      // return rot * Eigen::Vector2f(Ex-robot_loc_.x(), Ey-robot_loc_.y());
+      return Eigen::Vector2f(0.0,0.0);
   } else {
       // line doesn't touch circle
       ROS_INFO("No intersection");
@@ -475,7 +488,7 @@ Eigen::Vector2f Navigation::FindIntersectionPoints(){
   int i = 0;
   for (std::string node_id : global_path){
     ROS_INFO("iteration %d", i);
-    ROS_INFO("node_id = %s", node_id.c_str());
+    // ROS_INFO("node_id = %s", node_id.c_str());
     curr_id = node_id;
     if (!first_id){
       ROS_INFO("curr_id = %s", curr_id.c_str());
@@ -818,11 +831,11 @@ void Navigation::Run() {
       //    PlanSimplePath();
       // }
       if (!global_path.empty()){
-        Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
-        Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
-        relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
+        // Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
+        // Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
+        // relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
         // ROS_INFO("main 1");
-        // relative_local_target = FindIntersectionPoints();
+        relative_local_target = FindIntersectionPoints();
       }
       if(relative_local_target == Eigen::Vector2f(0.0,0.0)){
         //PlanSimplePath();
@@ -831,10 +844,10 @@ void Navigation::Run() {
         // ROS_INFO("main 3");
         DrawGlobalPath();
         // ROS_INFO("main 4");
-        Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
-        Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
-        relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
-        // relative_local_target = FindIntersectionPoints();
+        // Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
+        // Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
+        // relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
+        relative_local_target = FindIntersectionPoints();
       }
       // relative_local_target = Eigen::Vector2f(2.0, 0.0); //Calculate_Local_Target();
    }
