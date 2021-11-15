@@ -84,20 +84,19 @@ class Navigation {
 
   // Main function called continously from main
   void Run();
+
   // Used to set the next target pose.
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
 
   void ObstacleAvoid();
 
-  void PlanSimplePath();
+  void UpdateSimplePath();
 
-  void PlanGlobalPath();
+  void UpdateGlobalPath();
   
-  Eigen::Vector2f FindIntersectionPoints();
-
-  Eigen::Vector2f Calculate_Local_Target();
+  Eigen::Vector2f UpdateLocalTarget();
   
-  Eigen::Vector2f DrawIntersectionPoints(Eigen::Vector2f A, 
+  Eigen::Vector2f GetIntersectionPoint(Eigen::Vector2f A, 
                                         Eigen::Vector2f B,
                                         Eigen::Vector2f C,
                                         float r) ;
@@ -142,8 +141,7 @@ class Navigation {
   double latency;
 
   std::unique_ptr<object_avoidance::ObjectAvoidance> path_planner_;
-
-
+  
 };
 
 }  // namespace navigation
