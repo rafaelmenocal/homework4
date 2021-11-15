@@ -504,12 +504,14 @@ Eigen::Vector2f Navigation::FindIntersectionPoints(){
   //   ROS_INFO("node_id = %s", node_id.c_str());
   // }
 
-  float dist_to_target = (robot_loc_ - global_target).norm();
-  // float dist_to_target = (robot_loc_ - Eigen::Vector2f(Nodes[global_path.end()]->x,Nodes[global_path.end()]->y)).norm();
+  // float dist_to_target = (robot_loc_ - global_target).norm();
+  float dist_to_target = (robot_loc_ - Eigen::Vector2f(Nodes[global_path.back()]->x, Nodes[global_path.back()]->y)).norm();
   if (dist_to_target <= local_target_radius) {
     Eigen::Rotation2Df rot(-robot_angle_);
     local_target = rot * Eigen::Vector2f(global_target.x()-robot_loc_.x(),global_target.y()-robot_loc_.y());
     visualization::DrawCross(local_target, 0.15, 0x0045cf, local_viz_msg_);
+    // ROS_INFO("FindInt6");
+    // ROS_INFO("local_target = (%f, %f)", local_target.x(),local_target.y());
     return local_target;
   }
 
@@ -531,6 +533,7 @@ Eigen::Vector2f Navigation::FindIntersectionPoints(){
       // ROS_INFO("curr_node_loc = (%f, %f)", curr_node_loc.x(), curr_node_loc.y());
       // ROS_INFO("prev_node_loc = (%f, %f)", prev_node_loc.x(), prev_node_loc.y());
       local_target = DrawIntersectionPoints(prev_node_loc, curr_node_loc, robot_loc_, local_target_radius); 
+      // ROS_INFO("FindInt8");
       // ROS_INFO("local_target = (%f, %f)",local_target.x(), local_target.y());
 
       // TODO:  determine if local_target intersects line segment
@@ -538,7 +541,7 @@ Eigen::Vector2f Navigation::FindIntersectionPoints(){
 
       if (local_target != Eigen::Vector2f(0.0,0.0)){
         // ROS_INFO("FindInt3");
-        visualization::DrawLine(prev_node_loc, curr_node_loc, 0xcf0000, global_viz_msg_);
+        // visualization::DrawLine(prev_node_loc, curr_node_loc, 0xcf0000, global_viz_msg_);
         visualization::DrawCross(local_target, 0.15, 0x0045cf, local_viz_msg_);
         return local_target;
       }
@@ -550,7 +553,7 @@ Eigen::Vector2f Navigation::FindIntersectionPoints(){
     // ROS_INFO("FindInt5");
   }
   
-  // ROS_INFO("FindInt6");
+  // ROS_INFO("FindInt7");
   return Eigen::Vector2f(0.0, 0.0);
 
   // Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
@@ -670,7 +673,7 @@ void Navigation::PlanGlobalPath(){
   for (string s : result) {
     message = message + " " + s;
   }
-  ROS_INFO("%s", message.c_str());
+  ROS_INFO("%s \nMoving to Target.", message.c_str());
 
   // global_path.push_back(robot_name);
   // example accessing a node pointer Nodes["10,10"]->.neighbor_ids
@@ -853,6 +856,7 @@ void Navigation::Run() {
   // robot is at global_target
   if ((global_target == Eigen::Vector2f(0.0,0.0)) || ((robot_loc_ - global_target).norm() <= 2 * resolution)) { // distance to global target
      relative_local_target = Vector2f(0.0, 0.0);
+     ROS_INFO("Arrived at Target!");
    } else { // robot is not at global target
       
       // robot is straying off global path 
@@ -865,12 +869,12 @@ void Navigation::Run() {
         // Eigen::Vector2f start(Nodes[global_path.front()]->x,Nodes[global_path.front()]->y);
         // Eigen::Vector2f end(Nodes[global_path.back()]->x,Nodes[global_path.back()]->y);
         // relative_local_target = DrawIntersectionPoints(start, end, robot_loc_, local_target_radius); 
-        ROS_INFO("main 1");
+        // ROS_INFO("main 1");
         relative_local_target = FindIntersectionPoints();
       }
       if(relative_local_target == Eigen::Vector2f(0.0,0.0)){
         //PlanSimplePath();
-        ROS_INFO("main 2");
+        // ROS_INFO("main 2");
         PlanGlobalPath();
         // ROS_INFO("main 3");
         DrawGlobalPath();
