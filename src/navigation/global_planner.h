@@ -9,9 +9,6 @@
 
 using std::string;
 
-// The graph needs to be a global variable. This may not be the best place for it, but it's here temporarily.
-vector<Node*> graph;
-
 // Comparator object used in the priority_queue
 // Note that if we want n1 to appear before n2, the function must return false
 struct CompareNode{

@@ -7,7 +7,7 @@ using std::string;
 using std::vector;
 
 struct Node {  
-    std::string id; // Not sure what this is for
+    std::string id; // Used to find a node in the hashmap.
     float x; // x-coordinate in the map_frame
     float y; // y-coordinate in the map_frame
     float cost = -1; // Cost of taking the path through this node (Equal to the path length)
