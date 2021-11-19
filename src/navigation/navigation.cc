@@ -37,7 +37,6 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include "graph.h"
-// #include "geometry"
 #include "global_planner.h"
 
 using Eigen::Vector2f;
